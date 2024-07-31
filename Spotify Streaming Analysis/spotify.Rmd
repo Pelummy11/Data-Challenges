@@ -1,0 +1,247 @@
+---
+title: "Data in Motion: Data Analysis Challenge Week 4"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+  word_document: default
+---
+```{r}
+# loading the packages
+library(tidyverse)
+library(readr)
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+```
+
+```{r}
+# importing the dataset
+spotify <- read.csv("Most Streamed Spotify Songs 2024.csv")
+```
+
+```{r}
+head(spotify)
+```
+
+#### Data Cleaning
+```{r}
+# function to clean comma and convert to numeric
+clean_numeric <- function(x) {
+  x <- gsub(",", "", x)  # Remove commas
+  as.numeric(x)  # Convert to numeric
+}
+# apply the function to pandora streams
+spotify$Pandora.Streams <- clean_numeric(spotify$Pandora.Streams)
+class(spotify$Pandora.Streams)
+
+# apply the function to sound cloud streamns
+spotify$Soundcloud.Streams <- clean_numeric(spotify$Soundcloud.Streams)
+class(spotify$Soundcloud.Streams)
+
+# apply function to spotify playlist count
+spotify$Spotify.Playlist.Count <- clean_numeric(spotify$Spotify.Playlist.Count)
+class(spotify$Spotify.Playlist.Count)
+
+# apply function to spotify playlist reach
+spotify$Spotify.Playlist.Reach <- clean_numeric(spotify$Spotify.Playlist.Reach)
+class(spotify$Spotify.Playlist.Reach)
+
+# apply function to shazam count
+spotify$Shazam.Counts<- clean_numeric(spotify$Shazam.Counts)
+class(spotify$Shazam.Counts)
+
+# apply function to siriusxm
+spotify$SiriusXM.Spins<- clean_numeric(spotify$SiriusXM.Spins)
+class(spotify$SiriusXM.Spins)
+
+# convert explicit tract to facror
+spotify$Explicit.Track<- as.factor(spotify$Explicit.Track)
+class(spotify$Explicit.Track)
+
+```
+```{r}
+class(spotify$Release.Date)
+```
+```{r}
+# convert release date to date type
+spotify$Release.Date <- mdy(spotify$Release.Date)
+```
+```{r}
+class(spotify$Release.Date)
+```
+```{r}
+# extracting month, year from the release date 
+spotify <- spotify %>% 
+  mutate(Release.Month = month(Release.Date,label = TRUE, abbr = TRUE)) %>%
+  mutate(Release.Year = year(Release.Date))
+```
+
+
+#### Trend Analysis
+
+##### Identify and analyze the trends in song releases. Are there specific months or seasons when most top-streamed songs are released? What patterns can be observed?
+```{r}
+# songs released in each year
+released_songs_year <- spotify %>% 
+  group_by(Release.Year) %>% 
+  summarise(total_songs = n()) %>% 
+  arrange(desc(total_songs))
+tibble(released_songs_year)
+
+# albums release by year
+album_year <- spotify %>% 
+  group_by(Release.Year) %>% 
+  summarise(total_albums = n_distinct(Album.Name)) %>% 
+  arrange(desc(total_albums))
+tibble(album_year)
+```
+```{r}
+# top 10 spotify streamed songs and the release year,month
+top_10_spotify_streams <- spotify %>% 
+  group_by(Track) %>% 
+  summarise(stream = sum(Spotify.Streams),
+            Year = first(Release.Year),
+            Month = first(Release.Month)) %>% 
+  mutate(streams = stream/1e9,  # convert to billions
+         streams = sprintf("%.2fB",streams)) %>% # format as strings
+  arrange(desc(stream)) %>% 
+  select(Track,streams,Month,Year)
+
+top_10_spotify_streams <-tibble(head(top_10_spotify_streams, 10))
+top_10_spotify_streams
+```
+```{r}
+# top 10 pandora streamed songs and the release year,month
+top_10_pandora_streams <- spotify %>% 
+  group_by(Track) %>% 
+  summarise(stream = sum(Pandora.Streams),
+            Year = first(Release.Year),
+            Month = first(Release.Month)) %>% 
+   mutate(streams = stream/1e9,  # convert to billions
+         streams = sprintf("%.2fB",streams)) %>% # format as strings
+  arrange(desc(stream)) %>% 
+  select(Track,streams,Month,Year)
+
+ top_10_pandora_streams <-tibble(head(top_10_pandora_streams, 10))
+ top_10_pandora_streams
+```
+```{r}
+# top 10 soundcloud streamed songs and the release year,month
+top_10_soundcloud_streams <- spotify %>% 
+  group_by(Track) %>% 
+  summarise(stream = sum(Soundcloud.Streams),
+            Year = first(Release.Year),
+            Month = first(Release.Month)) %>% 
+   mutate(streams = stream/1e6,  # convert to millions
+         streams = sprintf("%.2fM",streams)) %>% # format as strings
+  arrange(desc(stream)) %>% 
+  select(Track,streams,Month,Year)
+
+top_10_soundcloud_streams <-tibble(head(top_10_soundcloud_streams, 10))
+top_10_soundcloud_streams
+```
+```{r}
+# overall top streamed songs on all platforms
+top_10_streamed_songs <- spotify %>% 
+  mutate(total_streams = rowSums(select(.,Spotify.Streams,Pandora.Streams,Soundcloud.Streams))) %>% #adding streams from all platforms 
+  group_by(Track) %>% 
+  summarise(stream = sum(total_streams, na.rm = TRUE),
+           Month = first(Release.Month) ) %>% 
+  mutate(streams = stream/1e9,  # convert to billions
+         streams = sprintf("%.2fB",streams)) %>% # format as strings
+  arrange(desc(stream)) %>% 
+  select(Track,streams,Month)
+top_10_streamed_songs <-tibble(head(top_10_streamed_songs, 10))
+
+top_10_streamed_songs 
+```
+
+#### Artist and Genre Impact
+
+##### Determine the impact of artists and genres on the streaming counts. Which artists have the highest average streams?
+
+```{r}
+# artists with the highest average streams on spotify
+top_10_spotify_artists <- spotify %>% 
+  group_by(Artist) %>% 
+  summarise(avg_streams = mean(Spotify.Streams)) %>% 
+   mutate(streams = avg_streams/1e9,  # convert to billions
+         streams = sprintf("%.2fB",streams)) %>% # format as strings
+  arrange(desc(avg_streams)) %>% 
+  slice_head(n = 10) %>% 
+  select(Artist,streams)
+top_10_spotify_artists
+
+# artists with the highest average streams on pandora
+top_10_pandora_artists <- spotify %>% 
+  group_by(Artist) %>% 
+  summarise(avg_streams = mean(Pandora.Streams)) %>% 
+  mutate(streams = avg_streams/1e9,  # convert to billions
+         streams = sprintf("%.2fB",streams)) %>% # format as strings
+  arrange(desc(avg_streams)) %>% 
+  slice_head(n = 10) %>% 
+ select(Artist,streams)
+top_10_pandora_artists
+
+# artists with the highest average streams on soundcloud
+top_10_soundcloud_artists <- spotify %>% 
+  group_by(Artist) %>% 
+  summarise(avg_streams = mean(Soundcloud.Streams)) %>% 
+  mutate(streams = avg_streams/1e6, # convert to millions
+      streams = sprintf("%.2fM",streams)) %>% # format as strings
+  arrange(desc(avg_streams)) %>% 
+  slice_head(n = 10) %>% 
+  select(Artist,streams)
+top_10_soundcloud_artists
+
+# artists with the highest average streams on all platforms
+top_10_overall_artist <- spotify %>% 
+  rowwise() %>%      # calculate the mean streams per song
+  mutate(mean_streams = mean(c_across(c(Spotify.Streams,Pandora.Streams,Soundcloud.Streams)))) %>% 
+  group_by(Artist) %>%  # group by artists and calculate avg mean streams
+  summarise(streams = mean(mean_streams, na.rm = TRUE)) %>% 
+  mutate(streams_B = streams/1e9,  # convert to billions
+         streams_B = sprintf("%.2fB",streams_B)) %>% # format as strings
+  arrange(desc(streams)) %>% 
+  slice_head(n = 10) %>% 
+  select(Artist, streams_B)
+top_10_overall_artist
+```
+#### Playlist Influence
+##### Assess the influence of playlist inclusion on the streaming counts. How does being featured in playlists correlate with the total streams of a song? 
+```{r}
+# calculate the correlation between spotify streams and the playlist count
+correlation <- cor(spotify$Spotify.Streams, spotify$Spotify.Playlist.Count, use = "complete.obs")
+
+# Print correlation coefficients
+print(paste("Correlation between Spotify Streams and Spotify Playlist Count: ", correlation))
+```
+#### External Factors
+##### Investigate how external factors such as explicit content, Shazam counts, and SiriusXM spins affect the popularity of songs. Is there a significant correlation between these factors and the streaming counts?
+
+```{r}
+# run a multiple regresssion analysis to examine the examine the relationship between Spotify streams and explicit track,Shazam counts, and SiriusXM spins.
+
+model <- lm(Spotify.Streams ~Explicit.Track + Shazam.Counts
+            + SiriusXM.Spins,data = spotify)
+summary(model)
+```
+```{r}
+# Calculate correlation coefficients
+cor_shazam <- cor(spotify$Spotify.Streams, spotify$Shazam.Counts, use = "complete.obs")
+cor_siriusxm <- cor(spotify$Spotify.Streams, spotify$SiriusXM.Spins, use = "complete.obs")
+
+# Print correlation coefficients
+print(paste("Correlation between Spotify Streams and Shazam Counts: ", cor_shazam))
+print(paste("Correlation between Spotify Streams and SiriusXM Spins: ", cor_siriusxm))
+
+```
+
+
+
+
+
+
+
